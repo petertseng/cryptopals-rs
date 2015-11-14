@@ -1,0 +1,7 @@
+[package]
+name = "cryptopals"
+version = "0.1.0"
+authors = ["Peter Tseng <pht24@cornell.edu>"]
+
+[dependencies]
+rustc-serialize = "0.3"
