@@ -1,7 +1,49 @@
 mod test_data;
 
+use edit_distance::hamming;
 use frequency::{ENGLISH_LETTERS, ENGLISH_FREQS, lower_english_only, letter_frequencies};
+use std::cmp;
 use std::f64;
+
+pub fn crack_vigenere(s: &[u8]) -> Option<Vec<u8>> {
+    let max_try = cmp::min(s.len() / 2, 40);
+
+    let mut length_scores: Vec<_> = (2..(max_try + 1)).map(|i| {
+        let first = &s[0..i];
+        let second = &s[i..(2 * i)];
+        let dist = hamming(first, second);
+        let normalized = (dist as f64) / (i as f64);
+        (i, normalized)
+    }).collect();
+
+    length_scores.sort_by(|&(_, a), &(_, b)| a.partial_cmp(&b).unwrap());
+
+    for &(length, _) in length_scores.iter() {
+        let blocks = chunks(s, length);
+        let mut key = Vec::new();
+        for b in blocks {
+            let (k, v, _, _) = crack(&b, true);
+            if v.is_empty() {
+                break;
+            }
+            key.push(k);
+        }
+
+        if key.len() == length {
+            return Some(key);
+        }
+    }
+
+    None
+}
+
+fn chunks(s: &[u8], n: usize) -> Vec<Vec<u8>> {
+    let mut chunks = vec![Vec::new(); n];
+    for (i, &c) in s.iter().enumerate() {
+        chunks[i % n].push(c);
+    }
+    chunks
+}
 
 pub fn detect(ss: &Vec<Vec<u8>>, must_be_printable: bool) -> (usize, &Vec<u8>, u8, Vec<u8>, String, f64) {
     let mut best_index = 0;
@@ -92,8 +134,10 @@ mod tests {
     use self::rustc_serialize::hex::{FromHex, ToHex};
 
     use xor::test_data::DETECT_STRINGS;
+    use xor::test_data::VIGENERE_STRING;
 
     use super::*;
+    use super::chunks;
 
     #[test]
     fn test_hex_to_base64() {
@@ -139,5 +183,24 @@ mod tests {
         let output = xor_repeating(input.as_bytes(), "ICE".as_bytes()).to_hex();
         let expected = "0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f";
         assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn test_chunks() {
+        // Set 1 Challenge 6
+        let input = &[1, 2, 3, 4, 5, 6];
+        let expected = vec![vec![1, 4], vec![2, 5], vec![3, 6]];
+        assert_eq!(chunks(input, 3), expected);
+    }
+
+    #[test]
+    fn test_crack_vigenere() {
+        // Set 1 Challenge 6
+        let key = crack_vigenere(VIGENERE_STRING).unwrap();
+        // Terminator X: Bring the noise
+        let expected = &[84, 101, 114, 109, 105, 110, 97, 116, 111, 114, 32, 88, 58, 32, 66, 114, 105, 110, 103, 32, 116, 104, 101, 32, 110, 111, 105, 115, 101];
+        assert_eq!(key, expected);
+        // It's "Play That Funky Music"
+        //println!("{}", String::from_utf8(xor_repeating(VIGENERE_STRING, &key)).unwrap());
     }
 }
